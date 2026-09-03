@@ -211,17 +211,6 @@ class ContrastGridElement extends HTMLElement {
     }
   }
 
-  #setKeyCellWidth() {
-    const columnCount = qsa(
-      ".es-contrast-grid__table tr:first-child td",
-      this,
-    ).length;
-
-    qsa(".es-contrast-grid__key-cell", this).forEach((cell) =>
-      cell.setAttribute("colspan", columnCount),
-    );
-  }
-
   #getVisibleLevels() {
     const group = qs(".es-color-form__checkbox-group");
 
@@ -306,7 +295,6 @@ class ContrastGridElement extends HTMLElement {
   #generate() {
     this.#generateForegroundKey();
     this.#generateContentRows();
-    this.#setKeyCellWidth();
     this.#addContrastToSwatches();
     this.addAccessibilityToSwatches();
     this.#setKeySwatchLabelColors();

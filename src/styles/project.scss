@@ -103,6 +103,32 @@ es-icon {
     padding: 0 $spacing-md $spacing-md;
 }
 
+// Grid legend, moved out of the table into the sidebar.
+.es-contrast-grid-key {
+    border-top: solid 1px darken($color-gray-95, 10%);
+    color: $color-black;
+    margin: 0 $spacing-md $spacing-md;
+    padding-top: $spacing-md;
+}
+
+.es-contrast-grid-key__label {
+    align-items: center;
+    display: flex;
+    font-size: $font-size-sm;
+    margin-bottom: $spacing-xs;
+
+    .es-contrast-grid__accessibility-label {
+        flex-shrink: 0;
+        margin-right: $spacing-xs;
+    }
+}
+
+.es-contrast-grid-key__link {
+    display: inline-block;
+    font-size: $font-size-sm;
+    margin-top: $spacing-xs;
+}
+
 .es-web-tool__legal {
     font-size: $font-size-sm;
     margin: 0;
