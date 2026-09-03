@@ -6,8 +6,6 @@ export const EVENTS = {
   removeColor: "escg.removeColor",
   columnsSorted: "escg.columnsSorted",
   rowsSorted: "escg.rowsSorted",
-  contrastGridUpdated: "escg.contrastGridUpdated",
-  showCodeSnippet: "escg.showCodeSnippet",
 };
 
 export function emit(name, ...args) {

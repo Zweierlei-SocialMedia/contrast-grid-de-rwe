@@ -1,21 +1,11 @@
-import arrowRepeat from "bootstrap-icons/icons/arrow-repeat.svg?raw";
-import clipboard from "bootstrap-icons/icons/clipboard.svg?raw";
-import github from "bootstrap-icons/icons/github.svg?raw";
 import gripHorizontal from "bootstrap-icons/icons/grip-horizontal.svg?raw";
 import gripVertical from "bootstrap-icons/icons/grip-vertical.svg?raw";
-import twitterX from "bootstrap-icons/icons/twitter-x.svg?raw";
 import xLg from "bootstrap-icons/icons/x-lg.svg?raw";
-import eightshapesMark from "../../brand/eightshapes-mark.svg?raw";
 
 const SOURCES = {
-  "circle-o-notch": arrowRepeat,
-  clipboard,
   close: xLg,
-  "eightshapes-mark": eightshapesMark,
-  github,
   grip: gripVertical,
   "grip-horizontal": gripHorizontal,
-  twitter: twitterX,
 };
 
 // Drops width/height/fill so the icon takes its size and color from the CSS

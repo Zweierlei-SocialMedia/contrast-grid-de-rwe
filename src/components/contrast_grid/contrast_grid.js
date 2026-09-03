@@ -3,7 +3,6 @@ import { qs, qsa, delegate } from "../../scripts/dom.js";
 import { EVENTS, emit, on } from "../../scripts/events.js";
 import { cssColorToHex, getContrastRatioForHex } from "./contrast.js";
 import template from "./contrast_grid.html?raw";
-import gridStyles from "./contrast_grid.scss?inline";
 
 const DEFAULT_GRID_DATA = {
   foregroundColors: [
@@ -31,9 +30,6 @@ class ContrastGridElement extends HTMLElement {
   connectedCallback() {
     this.innerHTML = template;
 
-    // Inlined so that the copied grid markup carries its own styling.
-    qs(".es-contrast-grid-styles", this).textContent = gridStyles;
-
     this.#grid = qs(".es-contrast-grid", this);
     this.#gridContent = qs(".es-contrast-grid__content", this);
     this.#foregroundKey = qs(".es-contrast-grid__foreground-key", this);
@@ -41,16 +37,6 @@ class ContrastGridElement extends HTMLElement {
     this.#takeTemplates();
     this.#bindEvents();
     this.#enableDragUi();
-  }
-
-  // Returns the grid markup without the interaction affordances, for the
-  // "Copy Grid HTML & CSS" feature.
-  getPortableMarkup() {
-    const clone = this.#grid.cloneNode(true);
-    qsa(".es-contrast-grid__key-swatch-controls", clone).forEach((controls) =>
-      controls.remove(),
-    );
-    return clone.outerHTML;
   }
 
   addAccessibilityToSwatches() {
@@ -325,7 +311,6 @@ class ContrastGridElement extends HTMLElement {
     this.addAccessibilityToSwatches();
     this.#setKeySwatchLabelColors();
     this.#truncateContrastDisplayValues();
-    emit(EVENTS.contrastGridUpdated);
     this.#setGridUiStatus();
   }
 
