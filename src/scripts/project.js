@@ -1,17 +1,17 @@
 import { EightShapes } from "./eightshapes.js";
+import { qs } from "./dom.js";
+import { EVENTS, emit } from "./events.js";
 
-$(document).ready(function(){
-    // Initialize the various components in the correct order
-    EightShapes.ContrastGrid.initialize();
-    EightShapes.CodeSnippet.initialize();
-    EightShapes.ColorForm.initialize();
+// Initialize the various components in the correct order
+EightShapes.ContrastGrid.initialize();
+EightShapes.CodeSnippet.initialize();
+EightShapes.ColorForm.initialize();
 
-    $(".es-code-toggle").on("click", function(){
-        $("body").addClass("es-code-toggle--visible");
-        $(document).trigger("escg.show-tab-es-tabs__global-panel--copy-code");
-    });
+qs(".es-code-toggle").addEventListener("click", () => {
+  document.body.classList.add("es-code-toggle--visible");
+  emit(EVENTS.showCodeSnippet);
+});
 
-    $(".es-code-snippet__hide-button").on("click", function(){
-        $("body").removeClass("es-code-toggle--visible");
-    });
+qs(".es-code-snippet__hide-button").addEventListener("click", () => {
+  document.body.classList.remove("es-code-toggle--visible");
 });

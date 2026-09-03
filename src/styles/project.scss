@@ -30,6 +30,18 @@ a {
     }
 }
 
+// The icons inherit `fill` from the host element, so the existing icon classes
+// keep working when applied to <es-icon>.
+es-icon {
+    display: inline-block;
+    line-height: 0;
+
+    svg {
+        height: 100%;
+        width: 100%;
+    }
+}
+
 .es-web-tool__flex-container {
     display: flex;
     flex-direction: column;

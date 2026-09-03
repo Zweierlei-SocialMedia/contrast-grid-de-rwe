@@ -1,62 +1,16 @@
-/* 
- * dragtable
- *
- * @Version 2.0.15
- *
- * default css
- *
- */
-/*##### the dragtable stuff #####*/
-.dragtable-sortable { 
-    list-style-type: none; margin: 0; padding: 0; -moz-user-select: none;
-}
-.dragtable-sortable li {
-    margin: 0; padding: 0; float: left; font-size: 1em; background: white; 
-}
-
-.dragtable-sortable .ui-sortable-placeholder th {
-    visibility: hidden;
-}
-
-.ui-sortable-helper {
-    // opacity: 0.7;
-    // filter: alpha(opacity=70);
+/* SortableJS drag states */
+.escg-drag-helper {
     box-shadow: $drop-shadow-default;
     transform: scale(1.02);
 }
-.ui-sortable-placeholder { 
-    // -moz-box-shadow: 4px 5px 4px #C6C6C6 inset;
-    // -webkit-box-shadow: 4px 5px 4px #C6C6C6 inset;
+
+.escg-drag-placeholder {
+    background: #EFEFEF !important;
     box-shadow: 4px 5px 4px #C6C6C6 inset;
-    // border-bottom: 1px solid #CCCCCC;
-    // border-top: 1px solid #CCCCCC;
-    visibility: visible !important;
-    background: #EFEFEF !important; 
-    visibility: visible !important;
-}
 
-// .ui-sortable-placeholder * { 
-//     opacity: 0.0; visibility: hidden; 
-// }
-
-.es-contrast-grid__row-placeholder {
-    height: $default-swatch-size;
-    padding: 1px;
-    position: relative;
-    visibility: visible !important;
-
-    td {
-        box-shadow: inset $drop-shadow-default;
-        visibility: visible !important;
+    * {
+        visibility: hidden;
     }
-}
-
-.es-contrast-grid__row-placeholder-cell {
-    box-shadow: 4px #C6C6C6 inset;
-}
-
-.dragtable-sortable + .es-contrast-grid__table .es-contrast-grid__foreground-key-cell {
-    visibility: hidden;
 }
 
 ////////////////////////

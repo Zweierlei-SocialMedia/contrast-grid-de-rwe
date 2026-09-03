@@ -1,580 +1,351 @@
-import { EightShapes } from "../../scripts/eightshapes.js";
+import Sortable from "sortablejs";
+import { qs, qsa, delegate } from "../../scripts/dom.js";
+import { EVENTS, emit, on } from "../../scripts/events.js";
+import { cssColorToHex, getContrastRatioForHex } from "./contrast.js";
+import template from "./contrast_grid.html?raw";
+import gridStyles from "./contrast_grid.scss?inline";
 
-EightShapes.ContrastGrid = (function () {
-  "use strict";
-  var $updateButton,
-    $grid,
-    $gridContent,
-    $foregroundKey,
-    $foregroundKeyCellTemplate,
-    $contentRowTemplate,
-    $contentCellTemplate,
-    $backgroundKey,
-    showLabelsOnColumnKeys = false,
-    gridData = {
-      foregroundColors: [
-        {
-          hex: "#000",
-          label: "Black",
-        },
-        {
-          hex: "#323232",
-        },
-        {
-          hex: "#4D4D4D",
-        },
-        {
-          hex: "#F3F1F1",
-        },
-        {
-          hex: "#FFF",
-          label: "White",
-        },
-        {
-          hex: "#DC6729",
-        },
-        {
-          hex: "#3995A9",
-          label: "Link Color",
-        },
-      ],
+const DEFAULT_GRID_DATA = {
+  foregroundColors: [
+    { hex: "#000", label: "Black" },
+    { hex: "#323232" },
+    { hex: "#4D4D4D" },
+    { hex: "#F3F1F1" },
+    { hex: "#FFF", label: "White" },
+    { hex: "#DC6729" },
+    { hex: "#3995A9", label: "Link Color" },
+  ],
+  backgroundColors: [],
+};
+
+class ContrastGridElement extends HTMLElement {
+  #grid;
+  #gridContent;
+  #foregroundKey;
+  #foregroundKeyCellTemplate;
+  #contentRowTemplate;
+  #contentCellTemplate;
+  #showLabelsOnColumnKeys = false;
+  #gridData = DEFAULT_GRID_DATA;
+
+  connectedCallback() {
+    this.innerHTML = template;
+
+    // Inlined so that the copied grid markup carries its own styling.
+    qs(".es-contrast-grid-styles", this).textContent = gridStyles;
+
+    this.#grid = qs(".es-contrast-grid", this);
+    this.#gridContent = qs(".es-contrast-grid__content", this);
+    this.#foregroundKey = qs(".es-contrast-grid__foreground-key", this);
+
+    this.#takeTemplates();
+    this.#bindEvents();
+    this.#enableDragUi();
+  }
+
+  // Returns the grid markup without the interaction affordances, for the
+  // "Copy Grid HTML & CSS" feature.
+  getPortableMarkup() {
+    const clone = this.#grid.cloneNode(true);
+    qsa(".es-contrast-grid__key-swatch-controls", clone).forEach((controls) =>
+      controls.remove(),
+    );
+    return clone.outerHTML;
+  }
+
+  addAccessibilityToSwatches() {
+    const shown = this.#getVisibleLevels();
+
+    qsa(".es-contrast-grid__swatch", this).forEach((swatch) => {
+      const contrast = parseFloat(
+        qs(".es-contrast-grid__contrast-ratio", swatch).textContent,
+      );
+
+      let level = "DNP";
+      if (contrast >= 7.0) {
+        level = "AAA";
+      } else if (contrast >= 4.5) {
+        level = "AA";
+      } else if (contrast >= 3.0) {
+        level = "AA18";
+      }
+
+      swatch.style.display = shown[level] ? "" : "none";
+
+      const pill = qs(".es-contrast-grid__accessibility-label", swatch);
+      pill.textContent = level;
+      pill.classList.add(
+        "es-contrast-grid__accessibility-label--" + level.toLowerCase(),
+      );
+    });
+  }
+
+  #takeTemplates() {
+    const take = (id) => {
+      const original = qs("#" + id, this);
+      const clone = original.cloneNode(true);
+      clone.removeAttribute("id");
+      original.remove();
+      return clone;
     };
 
-  function getForegroundColors() {
-    return gridData.foregroundColors;
+    this.#contentCellTemplate = take("es-contrast-grid__content-cell-template");
+    this.#foregroundKeyCellTemplate = take(
+      "es-contrast-grid__foreground-key-cell-template",
+    );
+    this.#contentRowTemplate = take("es-contrast-grid__content-row-template");
   }
 
-  function getBackgroundColors() {
-    if (
-      typeof gridData.backgroundColors === "undefined" ||
-      gridData.backgroundColors.length === 0
-    ) {
-      return gridData.foregroundColors.slice(0);
-    } else {
-      return gridData.backgroundColors;
-    }
-  }
+  #bindEvents() {
+    on(EVENTS.colorFormValuesChanged, (data) => this.#updateGrid(data));
+    on(EVENTS.tileSizeChanged, (tileSize) => this.#changeTileSize(tileSize));
 
-  function generateForegroundKey() {
-    var colors = getForegroundColors();
-    for (var i = 0; i < colors.length; i++) {
-      var hex = colors[i].hex,
-        hexLabel =
-          typeof colors[i].label === "undefined" ? hex : colors[i].label,
-        $foregroundKeyCell = $foregroundKeyCellTemplate.clone(),
-        $swatch = $foregroundKeyCell.find(".es-contrast-grid__key-swatch"),
-        $label = $swatch.find(".es-contrast-grid__key-swatch-label-text"),
-        $hexLabel = $swatch.find(".es-contrast-grid__key-swatch-label-hex"),
-        $removeAction = $swatch.find(".es-contrast-grid__key-swatch-remove");
-
-      $swatch.css("backgroundColor", hex).attr("data-hex", hex);
-      $removeAction.attr("data-hex", hex).attr("data-colorset", "foreground");
-
-      if (showLabelsOnColumnKeys) {
-        $label.text(hexLabel);
-        if (hex !== hexLabel) {
-          $hexLabel.text(hex);
-        }
-      } else {
-        $label.text(hex);
-      }
-
-      $foregroundKey.append($foregroundKeyCell);
-    }
-  }
-
-  function generateContentRows() {
-    var foregroundColors = getForegroundColors(),
-      backgroundColors = getBackgroundColors();
-
-    for (var i = 0; i < backgroundColors.length; i++) {
-      var bg = backgroundColors[i].hex,
-        bgLabel =
-          typeof backgroundColors[i].label === "undefined"
-            ? bg
-            : backgroundColors[i].label,
-        $contentRow = $contentRowTemplate.clone(),
-        $backgroundKeyCell = $contentRow.find(
-          ".es-contrast-grid__background-key-cell"
-        ),
-        $swatch = $backgroundKeyCell.find(".es-contrast-grid__key-swatch"),
-        $label = $swatch.find(".es-contrast-grid__key-swatch-label-text"),
-        $hexLabel = $swatch.find(".es-contrast-grid__key-swatch-label-hex"),
-        $removeAction = $swatch.find(".es-contrast-grid__key-swatch-remove");
-
-      $swatch.css("backgroundColor", bg).attr("data-hex", bg);
-      $removeAction.attr("data-hex", bg).attr("data-colorset", "background");
-      $label.text(bgLabel);
-      if (bgLabel !== bg) {
-        $hexLabel.text(bg);
-      }
-
-      for (var j = 0; j < foregroundColors.length; j++) {
-        var fg = foregroundColors[j].hex,
-          $contentCell = $contentCellTemplate.clone();
-
-        $contentCell
-          .find(".es-contrast-grid__swatch")
-          .css({ backgroundColor: bg, color: fg });
-
-        if (bg == fg) {
-          $contentCell
-            .html("")
-            .append("<div class='es-contrast-grid__swatch-spacer'></div>");
-        }
-        $contentRow.append($contentCell);
-      }
-
-      $gridContent.append($contentRow);
-    }
-  }
-
-  function disableDragUi() {
-    $(
-      ".es-contrast-grid__content.es-contrast-grid__content--sortable-initialized"
-    ).sortable("destroy");
-    $(
-      ".es-contrast-grid__table.es-contrast-grid__table--dragtable-initialized"
-    ).dragtable("destroy");
-  }
-
-  function enableDragUi() {
-    // Draggable Rows
-    $(".es-contrast-grid__content")
-      .addClass("es-contrast-grid__content--sortable-initialized")
-      .sortable({
-        axis: "y",
-        containment: ".es-contrast-grid",
-        placeholder: "es-contrast-grid__row-placeholder",
-        handle: ".es-contrast-grid__key-swatch-drag-handle--row",
-        tolerance: "pointer",
-        start: function (event, ui) {
-          var columnCount = $(".es-contrast-grid__row-placeholder td").length;
-          ui.placeholder
-            .html("")
-            .append("<td colspan='" + columnCount + "'></td>");
-          $(".es-contrast-grid__foreground-key")
-            .find("th")
-            .each(function (index) {
-              ui.helper
-                .find("td:nth-child(" + (index + 1) + ")")
-                .width($(this).outerWidth() + "px");
-            });
-        },
-        update: function (table) {
-          var sortedColors = extractBackgroundColorsFromGrid();
-          broadcastRowSort(sortedColors);
-        },
-      });
-
-    // Draggable Columns
-    $(".es-contrast-grid__table")
-      .addClass("es-contrast-grid__table--dragtable-initialized")
-      .dragtable({
-        containment: ".es-contrast-grid",
-        dragHandle: ".es-contrast-grid__key-swatch-drag-handle--column",
-        dragaccept: ".es-contrast-grid__foreground-key-cell",
-        persistState: function (table) {
-          var sortedColors = extractForegroundColorsFromGrid();
-          broadcastColumnSort(sortedColors);
-        },
-      });
-  }
-
-  function extractForegroundColorsFromGrid() {
-    var sortedForegroundColors = [];
-    $(".es-contrast-grid__key-swatch--foreground").each(function () {
-      sortedForegroundColors.push($(this).attr("data-hex"));
-    });
-
-    return sortedForegroundColors;
-  }
-
-  function extractBackgroundColorsFromGrid() {
-    var sortedBackgroundColors = [];
-    $(".es-contrast-grid__key-swatch--background").each(function () {
-      sortedBackgroundColors.push($(this).attr("data-hex"));
-    });
-
-    return sortedBackgroundColors;
-  }
-
-  function broadcastRowSort(sortedColors) {
-    $(document).trigger("escg.rowsSorted", [sortedColors]);
-  }
-
-  function broadcastColumnSort(sortedColors) {
-    $(document).trigger("escg.columnsSorted", [sortedColors]);
-  }
-
-  function broadcastGridUpdate() {
-    $(document).trigger("escg.contrastGridUpdated");
-  }
-
-  function setKeyCellWidth() {
-    var columnCount = $(".es-contrast-grid__table tr:first-child td").length;
-    $(".es-contrast-grid__key-cell").attr("colspan", columnCount);
-  }
-
-  function disableRowAndColumnRemoval() {
-    $grid.addClass("es-contrast-grid--row-and-column-removal-disabled");
-  }
-
-  function enableRowAndColumnRemoval() {
-    $grid.removeClass("es-contrast-grid--row-and-column-removal-disabled");
-  }
-
-  function setGridUiStatus() {
-    if (
-      gridData.foregroundColors.length <= 1 &&
-      gridData.backgroundColors.length <= 1
-    ) {
-      disableRowAndColumnRemoval();
-    } else {
-      enableRowAndColumnRemoval();
-    }
-  }
-
-  function generateGrid() {
-    generateForegroundKey();
-    generateContentRows();
-    setKeyCellWidth();
-    addContrastToSwatches();
-    addAccessibilityToSwatches();
-    setKeySwatchLabelColors();
-    truncateContrastDisplayValues();
-    disableDragUi();
-    enableDragUi();
-    broadcastGridUpdate();
-    setGridUiStatus();
-  }
-
-  function truncateContrastDisplayValues() {
-    var regex = /[\d]*.[\d][\d]/,
-      dotZeroRegex = /[\d]*.0/;
-
-    $(".es-contrast-grid__contrast-ratio").each(function () {
-      var $ratio = $(this),
-        value = $(this).text();
-
-      if (regex.exec(value) !== null) {
-        // this matches x.xx numbers, truncate one number
-        value = value.slice(0, -1);
-
-        if (dotZeroRegex.exec(value) !== null) {
-          value = value.slice(0, -2);
-        }
-
-        $ratio.text(value);
-      }
-      // if ($(this).text().endsWith('.')) {
-      //     $(this).text($(this).text().slice(0, -1));
-      // }
-    });
-  }
-
-  function addAccessibilityToSwatches(shown) {
-    var $swatches = $(".es-contrast-grid__swatch");
-
-    shown = $.find(".es-color-form__checkbox-group");
-    if (shown) {
-      shown = {
-        AAA: $(shown).find("#es-color-form__show-contrast--aaa:checked").length,
-        AA: $(shown).find("#es-color-form__show-contrast--aa:checked").length,
-        AA18: $(shown).find("#es-color-form__show-contrast--aa18:checked")
-          .length,
-        DNP: $(shown).find("#es-color-form__show-contrast--dnp:checked").length,
-      };
-    }
-
-    $swatches.each(function () {
-      var contrast = parseFloat(
-          $(this).find(".es-contrast-grid__contrast-ratio").text()
-        ),
-        $pill = $(this).find(".es-contrast-grid__accessibility-label"),
-        pillText = "DNP";
-
-      $(this).show();
-      if (contrast >= 7.0) {
-        pillText = "AAA";
-        if (!shown.AAA) {
-          $(this).hide();
-        }
-      } else if (contrast >= 4.5) {
-        pillText = "AA";
-        if (!shown.AA) {
-          $(this).hide();
-        }
-      } else if (contrast >= 3.0) {
-        pillText = "AA18";
-        if (!shown.AA18) {
-          $(this).hide();
-        }
-      } else {
-        if (!shown.DNP) {
-          $(this).hide();
-        }
-      }
-
-      $pill
-        .text(pillText)
-        .addClass(
-          "es-contrast-grid__accessibility-label--" + pillText.toLowerCase()
-        );
-    });
-  }
-
-  function setKeySwatchLabelColors() {
-    var $keys = $(".es-contrast-grid__key-swatch");
-    $keys.each(function () {
-      var backgroundColor = rgb2hex($(this).css("backgroundColor")),
-        contrastWithWhite = getContrastRatioForHex("#FFFFFF", backgroundColor);
-
-      if (contrastWithWhite === 1) {
-        $(this).addClass(
-          "es-contrast-grid--bordered-swatch es-contrast-grid--dark-label"
-        );
-      } else if (contrastWithWhite < 4.0) {
-        $(this).addClass("es-contrast-grid--dark-label");
-      }
-    });
-  }
-
-  function addContrastToSwatches() {
-    var $swatches = $(".es-contrast-grid__swatch");
-    $swatches.each(function () {
-      if (
-        typeof $(this).css("backgroundColor") !== "undefined" &&
-        typeof $(this).css("color") !== "undefined"
-      ) {
-        var backgroundColor = rgb2hex($(this).css("backgroundColor")),
-          foregroundColor = rgb2hex($(this).css("color")),
-          contrastRatio = getContrastRatioForHex(
-            foregroundColor,
-            backgroundColor
-          ),
-          contrastWithWhite = getContrastRatioForHex(
-            "#FFFFFF",
-            backgroundColor
-          );
-        $(this).find(".es-contrast-grid__contrast-ratio").text(contrastRatio);
-        if (contrastWithWhite === 1) {
-          $(this).addClass(
-            "es-contrast-grid--bordered-swatch es-contrast-grid--dark-label"
-          );
-        } else if (contrastWithWhite < 4.0) {
-          $(this).addClass("es-contrast-grid--dark-label");
-        }
-      }
-    });
-  }
-
-  function triggerUpdate() {
-    EightShapes.CodeSnippet.updateContent(getGridMarkup());
-  }
-
-  function setTemplateObjects() {
-    // Remove templates from the DOM after cloning into JS
-    $foregroundKeyCellTemplate = $(
-      "#es-contrast-grid__foreground-key-cell-template"
-    )
-      .clone()
-      .removeAttr("id");
-    $("#es-contrast-grid__foreground-key-cell-template").remove();
-    $contentCellTemplate = $("#es-contrast-grid__content-cell-template")
-      .clone()
-      .removeAttr("id");
-    $("#es-contrast-grid__content-cell-template").remove();
-
-    $contentRowTemplate = $("#es-contrast-grid__content-row-template")
-      .clone()
-      .removeAttr("id");
-
-    $("#es-contrast-grid__content-row-template").remove();
-  }
-
-  function setGridData(data) {
-    gridData = data;
-  }
-
-  function resetGrid() {
-    $grid.find(".es-contrast-grid__content-row").remove();
-    $grid.find(".es-contrast-grid__foreground-key-cell").remove();
-  }
-
-  function setColumnLabelStatus() {
-    if (gridData.backgroundColors.length > 0) {
-      showLabelsOnColumnKeys = true;
-    } else {
-      showLabelsOnColumnKeys = false;
-    }
-  }
-
-  function updateGrid(event, data) {
-    setGridData(data);
-    resetGrid();
-    setColumnLabelStatus();
-    generateGrid();
-  }
-
-  function changeTileSize(e, tileSize) {
-    $(".es-contrast-grid")
-      .removeClass(
-        "es-contrast-grid--regular es-contrast-grid--compact es-contrast-grid--large"
-      )
-      .addClass("es-contrast-grid--" + tileSize);
-    resetGrid();
-    generateGrid();
-  }
-
-  function initializeEventHandlers() {
-    $(document).on("escg.colorFormValuesChanged", updateGrid);
-    $(document).on("escg.tileSizeChanged", changeTileSize);
-    $(document).on(
+    delegate(
+      this,
       "click",
       ".es-contrast-grid__key-swatch-remove",
-      function (e) {
-        e.preventDefault();
-        $(document).trigger("escg.removeColor", [
-          $(this).attr("data-hex"),
-          $(this).attr("data-colorset"),
-        ]);
-      }
+      (event, action) => {
+        event.preventDefault();
+        emit(EVENTS.removeColor, action.dataset.hex, action.dataset.colorset);
+      },
     );
   }
 
-  var initialize = function initialize() {
-    $grid = $(".es-contrast-grid");
-    $gridContent = $grid.find(".es-contrast-grid__content");
-    $foregroundKey = $(".es-contrast-grid__foreground-key");
+  #enableDragUi() {
+    const shared = {
+      animation: 150,
+      ghostClass: "escg-drag-placeholder",
+      dragClass: "escg-drag-helper",
+      fallbackOnBody: true,
+    };
 
-    initializeEventHandlers();
-    setTemplateObjects();
-  };
+    // Sortable only reorders the DOM; the grid is then rebuilt from the color
+    // form, which is the single source of truth.
+    const broadcast = (event, colorset) =>
+      setTimeout(() => emit(event, this.#extractColors(colorset)), 0);
 
-  var public_vars = {
-    initialize: initialize,
-    addAccessibilityToSwatches: addAccessibilityToSwatches,
-  };
+    Sortable.create(this.#gridContent, {
+      ...shared,
+      direction: "vertical",
+      draggable: ".es-contrast-grid__content-row",
+      handle: ".es-contrast-grid__key-swatch-drag-handle--row",
+      onEnd: () => broadcast(EVENTS.rowsSorted, "background"),
+    });
 
-  return public_vars;
-})();
-
-// MIT Licensed function courtesty of Lea Verou
-// https://github.com/LeaVerou/contrast-ratio/blob/gh-pages/color.js
-Math.round = (function () {
-  var round = Math.round;
-
-  return function (number, decimals) {
-    decimals = +decimals || 0;
-
-    var multiplier = Math.pow(100, decimals);
-
-    return round(number * multiplier) / multiplier;
-  };
-})();
-
-// MIT Licensed functions courtesty of Qambar Raza
-// https://github.com/Qambar/color-contrast-checker/blob/master/src/colorContrastChecker.js
-var rgbClass = {
-  toString: function () {
-    return "<r: " + this.r + " g: " + this.g + " b: " + this.b + " >";
-  },
-};
-
-function getRGBFromHex(color) {
-  var rgb = Object.create(rgbClass),
-    rVal,
-    gVal,
-    bVal;
-
-  if (typeof color !== "string") {
-    throw new Error("must use string");
+    Sortable.create(this.#foregroundKey, {
+      ...shared,
+      direction: "horizontal",
+      draggable: ".es-contrast-grid__foreground-key-cell",
+      handle: ".es-contrast-grid__key-swatch-drag-handle--column",
+      onEnd: () => broadcast(EVENTS.columnsSorted, "foreground"),
+    });
   }
 
-  rVal = parseInt(color.slice(1, 3), 16);
-  gVal = parseInt(color.slice(3, 5), 16);
-  bVal = parseInt(color.slice(5, 7), 16);
-
-  rgb.r = rVal;
-  rgb.g = gVal;
-  rgb.b = bVal;
-
-  return rgb;
-}
-
-function calculateSRGB(rgb) {
-  var sRGB = Object.create(rgbClass),
-    key;
-
-  for (key in rgb) {
-    if (rgb.hasOwnProperty(key)) {
-      sRGB[key] = parseFloat(rgb[key] / 255, 10);
-    }
+  #extractColors(colorset) {
+    return qsa(`.es-contrast-grid__key-swatch--${colorset}`, this).map(
+      (swatch) => swatch.dataset.hex,
+    );
   }
 
-  return sRGB;
-}
+  #getForegroundColors() {
+    return this.#gridData.foregroundColors;
+  }
 
-function calculateLRGB(rgb) {
-  var sRGB = calculateSRGB(rgb);
-  var lRGB = Object.create(rgbClass),
-    key,
-    val = 0;
+  #getBackgroundColors() {
+    return this.#gridData.backgroundColors?.length
+      ? this.#gridData.backgroundColors
+      : this.#gridData.foregroundColors.slice(0);
+  }
 
-  for (key in sRGB) {
-    if (sRGB.hasOwnProperty(key)) {
-      val = parseFloat(sRGB[key], 10);
-      if (val <= 0.03928) {
-        lRGB[key] = val / 12.92;
+  #fillKeySwatch(swatch, hex, colorset) {
+    swatch.style.backgroundColor = hex;
+    swatch.dataset.hex = hex;
+
+    const removeAction = qs(".es-contrast-grid__key-swatch-remove", swatch);
+    removeAction.dataset.hex = hex;
+    removeAction.dataset.colorset = colorset;
+
+    return {
+      text: qs(".es-contrast-grid__key-swatch-label-text", swatch),
+      hex: qs(".es-contrast-grid__key-swatch-label-hex", swatch),
+    };
+  }
+
+  #generateForegroundKey() {
+    for (const color of this.#getForegroundColors()) {
+      const cell = this.#foregroundKeyCellTemplate.cloneNode(true);
+      const swatch = qs(".es-contrast-grid__key-swatch", cell);
+      const label = color.label ?? color.hex;
+      const labels = this.#fillKeySwatch(swatch, color.hex, "foreground");
+
+      if (this.#showLabelsOnColumnKeys) {
+        labels.text.textContent = label;
+        if (color.hex !== label) {
+          labels.hex.textContent = color.hex;
+        }
       } else {
-        lRGB[key] = Math.pow((val + 0.055) / 1.055, 2.4);
+        labels.text.textContent = color.hex;
       }
+
+      this.#foregroundKey.append(cell);
     }
   }
 
-  return lRGB;
-}
+  #generateContentRows() {
+    const foregroundColors = this.#getForegroundColors();
 
-function calculateLuminance(lRGB) {
-  return 0.2126 * lRGB.r + 0.7152 * lRGB.g + 0.0722 * lRGB.b;
-}
+    for (const background of this.#getBackgroundColors()) {
+      const row = this.#contentRowTemplate.cloneNode(true);
+      const swatch = qs(".es-contrast-grid__key-swatch", row);
+      const label = background.label ?? background.hex;
+      const labels = this.#fillKeySwatch(swatch, background.hex, "background");
 
-function getContrastRatio(lumA, lumB) {
-  var ratio, lighter, darker;
+      labels.text.textContent = label;
+      if (label !== background.hex) {
+        labels.hex.textContent = background.hex;
+      }
 
-  if (lumA >= lumB) {
-    lighter = lumA;
-    darker = lumB;
-  } else {
-    lighter = lumB;
-    darker = lumA;
+      for (const foreground of foregroundColors) {
+        const cell = this.#contentCellTemplate.cloneNode(true);
+
+        if (background.hex === foreground.hex) {
+          const spacer = document.createElement("div");
+          spacer.className = "es-contrast-grid__swatch-spacer";
+          cell.replaceChildren(spacer);
+        } else {
+          const tile = qs(".es-contrast-grid__swatch", cell);
+          tile.style.backgroundColor = background.hex;
+          tile.style.color = foreground.hex;
+        }
+
+        row.append(cell);
+      }
+
+      this.#gridContent.append(row);
+    }
   }
 
-  ratio = (lighter + 0.05) / (darker + 0.05);
+  #setKeyCellWidth() {
+    const columnCount = qsa(
+      ".es-contrast-grid__table tr:first-child td",
+      this,
+    ).length;
 
-  return Math.round(ratio, 1);
-}
-
-function getContrastRatioForHex(foregroundColor, backgroundColor) {
-  var color1 = getRGBFromHex(foregroundColor),
-    color2 = getRGBFromHex(backgroundColor),
-    l1RGB = calculateLRGB(color1),
-    l2RGB = calculateLRGB(color2),
-    l1 = calculateLuminance(l1RGB),
-    l2 = calculateLuminance(l2RGB);
-
-  return getContrastRatio(l1, l2);
-}
-
-function rgb2hex(rgb) {
-  if (/^#[0-9A-F]{6}$/i.test(rgb)) {
-    return rgb;
+    qsa(".es-contrast-grid__key-cell", this).forEach((cell) =>
+      cell.setAttribute("colspan", columnCount),
+    );
   }
 
-  rgb = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-  function hex(x) {
-    return ("0" + parseInt(x, 10).toString(16)).slice(-2);
+  #getVisibleLevels() {
+    const group = qs(".es-color-form__checkbox-group");
+
+    return {
+      AAA: !!qs("#es-color-form__show-contrast--aaa:checked", group),
+      AA: !!qs("#es-color-form__show-contrast--aa:checked", group),
+      AA18: !!qs("#es-color-form__show-contrast--aa18:checked", group),
+      DNP: !!qs("#es-color-form__show-contrast--dnp:checked", group),
+    };
   }
-  return "#" + hex(rgb[1]) + hex(rgb[2]) + hex(rgb[3]);
+
+  #markDarkLabel(element, backgroundColor) {
+    const contrastWithWhite = getContrastRatioForHex("#FFFFFF", backgroundColor);
+
+    if (contrastWithWhite === 1) {
+      element.classList.add(
+        "es-contrast-grid--bordered-swatch",
+        "es-contrast-grid--dark-label",
+      );
+    } else if (contrastWithWhite < 4.0) {
+      element.classList.add("es-contrast-grid--dark-label");
+    }
+  }
+
+  #addContrastToSwatches() {
+    qsa(".es-contrast-grid__swatch", this).forEach((swatch) => {
+      const styles = getComputedStyle(swatch);
+      const backgroundColor = cssColorToHex(styles.backgroundColor);
+
+      qs(".es-contrast-grid__contrast-ratio", swatch).textContent =
+        getContrastRatioForHex(cssColorToHex(styles.color), backgroundColor);
+
+      this.#markDarkLabel(swatch, backgroundColor);
+    });
+  }
+
+  #setKeySwatchLabelColors() {
+    qsa(".es-contrast-grid__key-swatch", this).forEach((swatch) =>
+      this.#markDarkLabel(
+        swatch,
+        cssColorToHex(getComputedStyle(swatch).backgroundColor),
+      ),
+    );
+  }
+
+  #truncateContrastDisplayValues() {
+    const twoDecimals = /[\d]*.[\d][\d]/;
+    const dotZero = /[\d]*.0/;
+
+    qsa(".es-contrast-grid__contrast-ratio", this).forEach((ratio) => {
+      let value = ratio.textContent;
+      if (twoDecimals.exec(value) === null) {
+        return;
+      }
+
+      value = value.slice(0, -1);
+      if (dotZero.exec(value) !== null) {
+        value = value.slice(0, -2);
+      }
+      ratio.textContent = value;
+    });
+  }
+
+  #setGridUiStatus() {
+    const singleColor =
+      this.#gridData.foregroundColors.length <= 1 &&
+      this.#gridData.backgroundColors.length <= 1;
+
+    this.#grid.classList.toggle(
+      "es-contrast-grid--row-and-column-removal-disabled",
+      singleColor,
+    );
+  }
+
+  #reset() {
+    qsa(".es-contrast-grid__content-row", this).forEach((row) => row.remove());
+    qsa(".es-contrast-grid__foreground-key-cell", this).forEach((cell) =>
+      cell.remove(),
+    );
+  }
+
+  #generate() {
+    this.#generateForegroundKey();
+    this.#generateContentRows();
+    this.#setKeyCellWidth();
+    this.#addContrastToSwatches();
+    this.addAccessibilityToSwatches();
+    this.#setKeySwatchLabelColors();
+    this.#truncateContrastDisplayValues();
+    emit(EVENTS.contrastGridUpdated);
+    this.#setGridUiStatus();
+  }
+
+  #updateGrid(data) {
+    this.#gridData = data;
+    this.#showLabelsOnColumnKeys = data.backgroundColors.length > 0;
+    this.#reset();
+    this.#generate();
+  }
+
+  #changeTileSize(tileSize) {
+    this.#grid.classList.remove(
+      "es-contrast-grid--regular",
+      "es-contrast-grid--compact",
+      "es-contrast-grid--large",
+    );
+    this.#grid.classList.add("es-contrast-grid--" + tileSize);
+    this.#reset();
+    this.#generate();
+  }
 }
+
+customElements.define("es-contrast-grid", ContrastGridElement);

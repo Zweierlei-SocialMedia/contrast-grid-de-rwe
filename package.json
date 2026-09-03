@@ -20,17 +20,11 @@
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "bootstrap-icons": "^1.13.1",
-    "nunjucks": "^3.2.4",
-    "postcss": "^8.5.6",
     "sass": "^1.93.2",
     "vite": "^7.1.7"
   },
   "dependencies": {
-    "clipboard": "^2.0.11",
-    "jquery": "^3.7.1",
-    "jquery-deserialize": "^2.0.0",
-    "jquery-ui-dist": "^1.13.3",
-    "jquery.typewatch": "^2.1.0",
-    "js-beautify": "^1.15.4"
+    "js-beautify": "^1.15.4",
+    "sortablejs": "^1.15.7"
   }
 }

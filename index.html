@@ -1,6 +1,3 @@
-{% from 'color_form/color_form.njk' import color_form %}
-{% from 'contrast_grid/contrast_grid.njk' import contrast_grid %}
-{% from 'code_snippet/code_snippet.njk' import code_snippet %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,22 +15,21 @@
                     <div class="es-web-tool__sidebar">
                         <h1 class="es-web-tool__title">
                             <a href="http://eightshapes.com">
-                                {{ icon(icon_name="eightshapes-mark", class="es-web-tool__title-logo") }}
+                                <es-icon name="eightshapes-mark" class="es-web-tool__title-logo"></es-icon>
                             </a>
                             <span class="es-web-tool__title-text">Contrast Grid</span>
                         </h1>
-                        {{ color_form() }}
+                        <es-color-form></es-color-form>
                         <div class="es-web-tool__sidebar-actions">
                             <div class="es-web-tool__sidebar-ctas">
                                 <button class="es-code-toggle es-button">Copy Grid HTML &amp; CSS</button>
                                 <a class="es-button es-web-tool__external-link--twitter" id="es-share-on-twitter-link" href="http://twitter.com/home?status=Test%20your%20entire%20color%20palette%20for%20accessibility.%20http://contrast-grid.eightshapes.com%20@eightshapes&amp;source=webclient">
-                                    {{ icon(icon_name="twitter", class="es-web-tool__external-link-logo es-button__icon") }}
+                                    <es-icon name="twitter" class="es-web-tool__external-link-logo es-button__icon"></es-icon>
                                     <span class="es-web-tool__external-link-text">
                                         Tweet My Grid
                                     </span>
                                 </a>
                             </div>
-
 
                             <div class="es-web-tool__external-links-wrap">
                                 <a class="es-web-tool__external-link es-web-tool__external-link--github" href="http://www.directededges.com/">
@@ -44,7 +40,7 @@
                                 <div class="es-web-tool__external-link-separator">
                                 </div>
                                 <a class="es-web-tool__external-link es-web-tool__external-link--github" href="https://github.com/EightShapes/contrast-grid">
-                                    {{ icon(icon_name="github", class="es-web-tool__external-link-logo") }}
+                                    <es-icon name="github" class="es-web-tool__external-link-logo"></es-icon>
                                     <span class="es-web-tool__external-link-text">
                                         On Github
                                     </span>
@@ -57,10 +53,10 @@
                         </div>
                     </div>
                     <div class="es-web-tool__results">
-                        {{ contrast_grid(contrast_grid_css) }}
+                        <es-contrast-grid></es-contrast-grid>
                     </div>
                 </div>
-                {{ code_snippet() }}
+                <es-code-snippet></es-code-snippet>
             </div>
         </div>
     </div>

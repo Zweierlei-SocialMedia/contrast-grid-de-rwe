@@ -1,288 +1,233 @@
-import { EightShapes } from "../../scripts/eightshapes.js";
+import { qs, qsa, debounce } from "../../scripts/dom.js";
+import { EVENTS, emit, on } from "../../scripts/events.js";
+import template from "./color_form.html?raw";
 
-EightShapes.ColorForm = (function () {
-  "use strict";
-  var $colorForm,
-    $foregroundColorsInput,
-    $backgroundColorsInput,
-    foregroundColors,
-    backgroundColors,
-    hexRegex = /^(#?[A-Fa-f0-9]{6}|#?[A-Fa-f0-9]{3})(,.*)?/gim;
+const HEX_REGEX = /^(#?[A-Fa-f0-9]{6}|#?[A-Fa-f0-9]{3})(,.*)?/gim;
 
-  function processColorInput($input) {
-    var value = $input.val(),
-      m,
-      hexValues = [],
-      colors = [];
+function parseColorInput(value) {
+  const seen = new Set();
+  const colors = [];
+  let match;
 
-    while ((m = hexRegex.exec(value)) !== null) {
-      if (m.index === hexRegex.lastIndex) {
-        hexRegex.lastIndex++;
-      }
-
-      var hex = m[1],
-        label = m[2],
-        colorData = { hex: false };
-
-      if (hex.indexOf("#") !== 0) {
-        hex = "#" + hex;
-      }
-
-      colorData.hex = hex.toUpperCase();
-
-      if (typeof label !== "undefined") {
-        label = label.slice(1).trim(); //Remove the leading comma matched in the regex and any leading or trailing whitespace
-        if (label.length > 0) {
-          colorData.label = label;
-        }
-      }
-
-      if (hexValues.indexOf(hex) === -1) {
-        hexValues.push(hex);
-        colors.push(colorData);
-      }
+  HEX_REGEX.lastIndex = 0;
+  while ((match = HEX_REGEX.exec(value)) !== null) {
+    if (match.index === HEX_REGEX.lastIndex) {
+      HEX_REGEX.lastIndex++;
     }
 
-    if ($input.attr("id") == "es-color-form__foreground-colors") {
-      foregroundColors = colors;
-    } else if ($input.attr("id") == "es-color-form__background-colors") {
-      backgroundColors = colors;
+    const hex = (match[1].startsWith("#") ? match[1] : "#" + match[1]).toUpperCase();
+    if (seen.has(hex)) {
+      continue;
     }
+    seen.add(hex);
+
+    // The regex captures the leading comma along with the label.
+    const label = match[2]?.slice(1).trim();
+    colors.push(label ? { hex, label } : { hex });
   }
 
-  function updateInputText(inputName, text) {
-    $("#es-color-form__" + inputName + "-colors").val(text);
+  return colors;
+}
+
+function colorsToText(colors) {
+  return colors
+    .map((color) => (color.label ? `${color.hex}, ${color.label}\n` : `${color.hex}\n`))
+    .join("");
+}
+
+class ColorFormElement extends HTMLElement {
+  #form;
+  #foregroundInput;
+  #backgroundInput;
+  #foregroundColors = [];
+  #backgroundColors = [];
+
+  connectedCallback() {
+    this.innerHTML = template;
+
+    this.#form = qs(".es-color-form", this);
+    this.#foregroundInput = qs("#es-color-form__foreground-colors", this);
+    this.#backgroundInput = qs("#es-color-form__background-colors", this);
+
+    this.#bindEvents();
   }
 
-  function convertGridDataToText(colors) {
-    var text = "";
-
-    colors.forEach(function (colorData) {
-      text += colorData.hex;
-      if (typeof colorData.label !== "undefined") {
-        text += ", " + colorData.label;
-      }
-      text += "\n";
-    });
-    return text;
+  // Called once every component is upgraded, so the grid is already listening.
+  start() {
+    this.#loadFromUrl();
+    this.#broadcastValues();
+    this.#broadcastTileSize();
   }
 
-  function removeColorFromData(hex, colors) {
-    colors = colors.filter(function (color) {
-      return color.hex !== hex ? true : false;
-    });
-    return colors;
+  #bindEvents() {
+    const onType = debounce(() => this.#broadcastValues(), 500);
+    this.#foregroundInput.addEventListener("input", onType);
+    this.#backgroundInput.addEventListener("input", onType);
+
+    on(EVENTS.removeColor, (hex, colorset) => this.#removeColor(hex, colorset));
+    on(EVENTS.columnsSorted, (order) => this.#sortForeground(order));
+    on(EVENTS.rowsSorted, (order) => this.#sortBackground(order));
+
+    qsa(
+      ".es-color-form__show-background-colors, .es-color-form__hide-background-colors",
+      this,
+    ).forEach((link) =>
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        this.#toggleBackgroundInput();
+        this.#broadcastValues();
+      }),
+    );
+
+    qsa("input[name='es-color-form__tile-size']", this).forEach((input) =>
+      input.addEventListener("change", () => this.#broadcastTileSize()),
+    );
+
+    qsa("input[name='es-color-form__show-contrast']", this).forEach((input) =>
+      input.addEventListener("change", () => {
+        qs("es-contrast-grid").addAccessibilityToSwatches();
+        this.#updateUrl();
+      }),
+    );
   }
 
-  var removeColor = function removeColor(e, hex, colorset) {
-    colorset =
-      colorset === "background" && backgroundColors.length === 0
-        ? "foreground"
-        : colorset;
-    var colors =
-        colorset === "background" ? backgroundColors : foregroundColors,
-      gridDataText = "";
-    colors = removeColorFromData(hex, colors);
-    gridDataText = convertGridDataToText(colors);
-    updateInputText(colorset, gridDataText);
-    broadcastFormValueChange();
-  };
+  #getGridData() {
+    this.#foregroundColors = parseColorInput(this.#foregroundInput.value);
+    this.#backgroundColors = parseColorInput(this.#backgroundInput.value);
 
-  function getCurrentGridData() {
-    $colorForm.find(".es-color-form__textarea").each(function () {
-      processColorInput($(this));
-    });
-
-    var gridData = {
-      foregroundColors: foregroundColors,
-      backgroundColors: backgroundColors,
+    return {
+      foregroundColors: this.#foregroundColors,
+      backgroundColors: this.#backgroundColors,
     };
-
-    return gridData;
   }
 
-  function broadcastFormValueChange() {
-    var gridData = getCurrentGridData();
-    $(document).trigger("escg.colorFormValuesChanged", [gridData]);
-    updateUrl();
+  #broadcastValues() {
+    emit(EVENTS.colorFormValuesChanged, this.#getGridData());
+    this.#updateUrl();
   }
 
-  function sortForegroundColors(e, sortedColorsKey) {
-    var sortedForegroundColors = [],
-      gridDataText = "";
-    sortedColorsKey.forEach(function (hexKey) {
-      foregroundColors.forEach(function (colorData) {
-        if (colorData.hex === hexKey) {
-          sortedForegroundColors.push(colorData);
+  #broadcastTileSize() {
+    emit(
+      EVENTS.tileSizeChanged,
+      qs("input[name='es-color-form__tile-size']:checked", this).value,
+    );
+    this.#updateUrl();
+  }
+
+  #updateUrl() {
+    const query = new URLSearchParams(new FormData(this.#form)).toString();
+    window.history.pushState(null, "", "/?" + query);
+  }
+
+  #setInputText(inputName, text) {
+    qs("#es-color-form__" + inputName + "-colors", this).value = text;
+  }
+
+  #removeColor(hex, colorset) {
+    if (colorset === "background" && this.#backgroundColors.length === 0) {
+      colorset = "foreground";
+    }
+
+    const colors =
+      colorset === "background" ? this.#backgroundColors : this.#foregroundColors;
+
+    this.#setInputText(colorset, colorsToText(colors.filter((c) => c.hex !== hex)));
+    this.#broadcastValues();
+  }
+
+  #sortByHexOrder(colors, order) {
+    return order.map((hex) => colors.find((c) => c.hex === hex)).filter(Boolean);
+  }
+
+  #sortForeground(order) {
+    this.#setInputText(
+      "foreground",
+      colorsToText(this.#sortByHexOrder(this.#foregroundColors, order)),
+    );
+    this.#broadcastValues();
+  }
+
+  #sortBackground(order) {
+    const usesDistinctRows = this.#backgroundColors.length > 0;
+    const source = usesDistinctRows ? this.#backgroundColors : this.#foregroundColors;
+
+    this.#setInputText(
+      usesDistinctRows ? "background" : "foreground",
+      colorsToText(this.#sortByHexOrder(source, order)),
+    );
+    this.#broadcastValues();
+  }
+
+  #toggleBackgroundInput() {
+    const label = qs("label[for='es-color-form__foreground-colors']", this);
+    const isShowing = this.#form.classList.toggle(
+      "es-color-form--show-background-colors-input",
+    );
+
+    if (!isShowing) {
+      label.textContent = "Rows & Columns";
+      this.#foregroundInput.dataset.persistedText = this.#foregroundInput.value;
+      this.#foregroundInput.value = this.#backgroundInput.value;
+      this.#backgroundInput.value = "";
+      return;
+    }
+
+    label.textContent = "Columns";
+
+    // Already populated when the state was restored from the URL.
+    if (this.#backgroundInput.value.length === 0) {
+      this.#backgroundInput.value = this.#foregroundInput.value;
+    }
+    if (this.#foregroundInput.dataset.persistedText !== undefined) {
+      this.#foregroundInput.value = this.#foregroundInput.dataset.persistedText;
+    }
+  }
+
+  #restoreFromQuery(query) {
+    const params = new URLSearchParams(query);
+
+    // Only clear groups the URL actually carries, otherwise a URL saved before
+    // a field existed would leave that field with no selection at all.
+    for (const name of new Set(params.keys())) {
+      qsa(`[name="${CSS.escape(name)}"]`, this).forEach((field) => {
+        if (field.type === "checkbox" || field.type === "radio") {
+          field.checked = false;
         }
       });
-    });
-    gridDataText = convertGridDataToText(sortedForegroundColors);
-    updateInputText("foreground", gridDataText);
-    broadcastFormValueChange();
-  }
-
-  function sortBackgroundColors(e, sortedColorsKey) {
-    var sortedBackgroundColors = [],
-      gridDataText = "",
-      inputField = "",
-      startingColorData;
-
-    if (backgroundColors.length > 0) {
-      inputField = "background";
-      startingColorData = backgroundColors;
-    } else {
-      inputField = "foreground";
-      startingColorData = foregroundColors;
     }
 
-    sortedColorsKey.forEach(function (hexKey) {
-      startingColorData.forEach(function (colorData) {
-        if (colorData.hex === hexKey) {
-          sortedBackgroundColors.push(colorData);
+    for (const [name, value] of params) {
+      qsa(`[name="${CSS.escape(name)}"]`, this).forEach((field) => {
+        if (field.type === "checkbox" || field.type === "radio") {
+          field.checked ||= field.value === value;
+        } else {
+          field.value = value;
         }
       });
-    });
-    gridDataText = convertGridDataToText(sortedBackgroundColors);
-    updateInputText(inputField, gridDataText);
-    broadcastFormValueChange();
+    }
   }
 
-  function toggleBackgroundColorsInput(e) {
-    if (typeof e !== "undefined") {
-      e.preventDefault();
+  #loadFromUrl() {
+    const query = window.location.search.slice(1);
+
+    if (query.length > 0) {
+      this.#restoreFromQuery(query);
     }
-    var $backgroundColors = $("#es-color-form__background-colors"),
-      $foregroundColors = $("#es-color-form__foreground-colors");
-    if (
-      $(".es-color-form").hasClass(
-        "es-color-form--show-background-colors-input"
-      )
-    ) {
-      // hide the background Colors Input
-      $(".es-color-form").removeClass(
-        "es-color-form--show-background-colors-input"
+
+    // Toggling contrast swatches arrived in 1.1.0; URLs saved before that carry
+    // no state to restore, so show everything.
+    if (!query.includes("version=1.1.0")) {
+      qsa("input[name='es-color-form__show-contrast']", this).forEach(
+        (input) => {
+          input.checked = true;
+        },
       );
-      $("label[for='es-color-form__foreground-colors']").text("Rows & Columns");
-      $foregroundColors.attr("data-persisted-text", $foregroundColors.val());
-      $foregroundColors.val($backgroundColors.val());
-      $backgroundColors.val("");
-      broadcastFormValueChange();
-    } else {
-      // show the background Colors Input
-      $(".es-color-form").addClass(
-        "es-color-form--show-background-colors-input"
-      );
-      $("label[for='es-color-form__foreground-colors']").text("Columns");
-
-      if ($backgroundColors.val().length == 0) {
-        // $backgroundColors will already have a value when loading from the url
-        $backgroundColors.val($foregroundColors.val());
-      }
-
-      if (
-        typeof $foregroundColors.attr("data-persisted-text") !== "undefined"
-      ) {
-        $foregroundColors.val($foregroundColors.attr("data-persisted-text"));
-      }
-      broadcastFormValueChange();
-    }
-  }
-
-  function broadcastTileSizeChange(e) {
-    var tileSize = $colorForm
-      .find("input[name='es-color-form__tile-size']:checked")
-      .val();
-    $(document).trigger("escg.tileSizeChanged", [tileSize]);
-    updateUrl();
-  }
-
-  function broadcastCodeSnippetViewToggle(e) {
-    e.preventDefault();
-    $(document).trigger("escg.showCodeSnippet");
-  }
-
-  function updateUrl() {
-    window.history.pushState(false, false, "/?" + $colorForm.serialize());
-  }
-
-  // function disableFormFields() {
-  //     $colorForm.find("textarea, input").prop("disabled", true);
-  // }
-
-  // function enableFormFields() {
-  //     $colorForm.find("textarea, input").prop("disabled", false);
-  // }
-
-  function initializeEventHandlers() {
-    $foregroundColorsInput.typeWatch({
-      wait: 500,
-      callback: broadcastFormValueChange,
-    });
-    $backgroundColorsInput.typeWatch({
-      wait: 500,
-      callback: broadcastFormValueChange,
-    });
-    $(document).on("escg.removeColor", removeColor);
-    $(document).on("escg.columnsSorted", sortForegroundColors);
-    $(document).on("escg.rowsSorted", sortBackgroundColors);
-    // $(document).on('escg.show-tab-es-tabs__global-panel--copy-code', disableFormFields);
-    // $(document).on('escg.show-tab-es-tabs__global-panel--analyze', enableFormFields);
-    $(
-      ".es-color-form__show-background-colors, .es-color-form__hide-background-colors"
-    ).on("click", toggleBackgroundColorsInput);
-    $("input[name='es-color-form__tile-size']").on(
-      "change",
-      broadcastTileSizeChange
-    );
-    $("input[name='es-color-form__show-contrast']").on("change", function () {
-      EightShapes.ContrastGrid.addAccessibilityToSwatches();
-      updateUrl();
-    });
-    $(".es-color-form__view-code-toggle").on(
-      "click",
-      broadcastCodeSnippetViewToggle
-    );
-  }
-
-  function loadFormDataFromUrl() {
-    if (location.search.substr(1).length > 0) {
-      $colorForm.deserialize(location.search.substr(1));
-    } else {
-      // loading for the first time, no query string
-      enableAllContrastSwatches();
     }
 
-    // Toggling contrast swatches was added in version 1.1.0, if the URL was saved prior to that version, enable all contrast swatch tiles by default
-    if (!location.search.substr(1).includes("version=1.1.0")) {
-      enableAllContrastSwatches();
-    }
-
-    if ($backgroundColorsInput.val().length > 0) {
-      toggleBackgroundColorsInput();
+    if (this.#backgroundInput.value.length > 0) {
+      this.#toggleBackgroundInput();
     }
   }
+}
 
-  function enableAllContrastSwatches() {
-    // toggle all accessibility swatches on
-    $("input[name='es-color-form__show-contrast']").attr("checked", true);
-  }
-
-  var initialize = function initialize() {
-    $colorForm = $(".es-color-form");
-    $foregroundColorsInput = $("#es-color-form__foreground-colors");
-    $backgroundColorsInput = $("#es-color-form__background-colors");
-    loadFormDataFromUrl();
-    initializeEventHandlers();
-    broadcastFormValueChange();
-    broadcastTileSizeChange();
-  };
-
-  var public_vars = {
-    initialize: initialize,
-    removeColor: removeColor,
-    updateUrl: updateUrl,
-  };
-
-  return public_vars;
-})();
+customElements.define("es-color-form", ColorFormElement);
