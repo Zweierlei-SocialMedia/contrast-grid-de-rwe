@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import autoprefixer from "autoprefixer";
@@ -7,9 +8,8 @@ import postcss from "postcss";
 import * as sass from "sass";
 import nunjucks from "nunjucks";
 
+const require = createRequire(import.meta.url);
 const root = path.dirname(fileURLToPath(import.meta.url));
-const SVG_DIR = path.join(root, "src", "svg");
-const SPRITE_FILE = "svg/contrast-grid.svg";
 const GRID_SCSS = path.join(
   root,
   "src",
@@ -17,6 +17,19 @@ const GRID_SCSS = path.join(
   "contrast_grid",
   "contrast_grid.scss",
 );
+
+// Maps the names used in templates to their source file. Everything but the
+// brand mark comes from the bootstrap-icons package.
+const ICONS = {
+  "circle-o-notch": "bootstrap-icons/icons/arrow-repeat.svg",
+  clipboard: "bootstrap-icons/icons/clipboard.svg",
+  close: "bootstrap-icons/icons/x-lg.svg",
+  github: "bootstrap-icons/icons/github.svg",
+  grip: "bootstrap-icons/icons/grip-vertical.svg",
+  "grip-horizontal": "bootstrap-icons/icons/grip-horizontal.svg",
+  twitter: "bootstrap-icons/icons/twitter-x.svg",
+  "eightshapes-mark": path.join(root, "src", "brand", "eightshapes-mark.svg"),
+};
 
 const sassOptions = {
   loadPaths: [path.join(root, "src", "components")],
@@ -39,22 +52,22 @@ async function compileGridCss() {
   return result.css;
 }
 
-function buildSprite() {
-  const symbols = fs
-    .readdirSync(SVG_DIR)
-    .filter((file) => file.endsWith(".svg"))
-    .map((file) => {
-      const raw = fs.readFileSync(path.join(SVG_DIR, file), "utf8");
-      const openTag = raw.match(/<svg\b[^>]*>/i)[0];
-      const viewBox = openTag.match(/viewBox="([^"]+)"/i);
-      const inner = raw
-        .slice(raw.indexOf(openTag) + openTag.length, raw.lastIndexOf("</svg>"))
-        .trim();
-      const id = path.basename(file, ".svg");
-      return `<symbol id="${id}"${viewBox ? ` viewBox="${viewBox[1]}"` : ""}>${inner}</symbol>`;
-    });
+function renderIcon(name, className) {
+  const source = ICONS[name];
+  if (!source) {
+    throw new Error(`Unknown icon "${name}"`);
+  }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${symbols.join("")}</svg>`;
+  const file = path.isAbsolute(source) ? source : require.resolve(source);
+  const svg = fs.readFileSync(file, "utf8").trim();
+  const classes = [`icon-${name}`, className].filter(Boolean).join(" ");
+
+  return svg
+    .replace(/<title>[\s\S]*?<\/title>/g, "")
+    .replace(/<svg\b[^>]*>/, (openTag) => {
+      const viewBox = openTag.match(/viewBox="[^"]*"/)?.[0] ?? "";
+      return `<svg xmlns="http://www.w3.org/2000/svg" ${viewBox} class="${classes}" fill="currentColor" aria-hidden="true" focusable="false">`;
+    });
 }
 
 function nunjucksPlugin() {
@@ -65,6 +78,11 @@ function nunjucksPlugin() {
     ),
     { autoescape: false },
   );
+
+  env.addGlobal("icon", (...args) => {
+    const kwargs = args[args.length - 1] ?? {};
+    return renderIcon(kwargs.icon_name, kwargs.class);
+  });
 
   return {
     name: "contrast-grid:nunjucks",
@@ -79,7 +97,7 @@ function nunjucksPlugin() {
     configureServer(server) {
       server.watcher.add([
         path.join(root, "src", "components"),
-        path.join(root, "src", "svg"),
+        path.join(root, "src", "brand"),
       ]);
       server.watcher.on("change", (file) => {
         if (/\.(njk|svg)$/.test(file) || file === GRID_SCSS) {
@@ -90,31 +108,9 @@ function nunjucksPlugin() {
   };
 }
 
-function svgSpritePlugin() {
-  return {
-    name: "contrast-grid:svg-sprite",
-    generateBundle() {
-      this.emitFile({
-        type: "asset",
-        fileName: SPRITE_FILE,
-        source: buildSprite(),
-      });
-    },
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.url?.split("?")[0] !== `/${SPRITE_FILE}`) {
-          return next();
-        }
-        res.setHeader("Content-Type", "image/svg+xml");
-        res.end(buildSprite());
-      });
-    },
-  };
-}
-
 export default defineConfig({
   base: "./",
-  plugins: [nunjucksPlugin(), svgSpritePlugin()],
+  plugins: [nunjucksPlugin()],
   css: {
     preprocessorOptions: { scss: sassOptions },
     postcss: { plugins: [autoprefixer()] },

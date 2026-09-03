@@ -19,6 +19,7 @@
   ],
   "devDependencies": {
     "autoprefixer": "^10.4.21",
+    "bootstrap-icons": "^1.13.1",
     "nunjucks": "^3.2.4",
     "postcss": "^8.5.6",
     "sass": "^1.93.2",
@@ -30,7 +31,6 @@
     "jquery-deserialize": "^2.0.0",
     "jquery-ui-dist": "^1.13.3",
     "jquery.typewatch": "^2.1.0",
-    "js-beautify": "^1.15.4",
-    "svg4everybody": "^2.1.9"
+    "js-beautify": "^1.15.4"
   }
 }

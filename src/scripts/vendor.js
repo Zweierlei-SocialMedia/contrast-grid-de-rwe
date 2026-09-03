@@ -6,9 +6,7 @@ import "jquery.typewatch";
 import "./dragtable.js";
 import Clipboard from "clipboard";
 import beautify from "js-beautify";
-import svg4everybody from "svg4everybody";
 
 window.Clipboard = Clipboard;
 window.html_beautify = beautify.html;
 window.css_beautify = beautify.css;
-window.svg4everybody = svg4everybody;
