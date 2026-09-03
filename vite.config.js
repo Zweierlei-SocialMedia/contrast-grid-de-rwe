@@ -120,7 +120,7 @@ export default defineConfig({
     postcss: { plugins: [autoprefixer()] },
   },
   build: {
-    outDir: "dist",
+    outDir: "docs",
     emptyOutDir: true,
   },
 });
