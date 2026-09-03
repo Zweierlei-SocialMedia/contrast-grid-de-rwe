@@ -1,4 +1,4 @@
-var EightShapes = EightShapes || {};
+import { EightShapes } from "../../scripts/eightshapes.js";
 
 EightShapes.ContrastGrid = (function () {
   "use strict";

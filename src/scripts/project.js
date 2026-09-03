@@ -1,3 +1,5 @@
+import { EightShapes } from "./eightshapes.js";
+
 $(document).ready(function(){
     // Initialize the various components in the correct order
     EightShapes.ContrastGrid.initialize();

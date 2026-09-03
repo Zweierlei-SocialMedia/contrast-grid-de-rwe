@@ -1,4 +1,5 @@
-{% macro contrast_grid() %}
+{% from 'icon/icon.njk' import icon %}
+{% macro contrast_grid(contrast_grid_css) %}
     <div class="es-contrast-grid">
         <div class="es-contrast-grid__inner">
             <table class="es-contrast-grid__table">
@@ -93,7 +94,7 @@
             </table>
         </div>
         <style class="es-contrast-grid-styles">
-            {% include 'contrast_grid.css' %}
+            {{ contrast_grid_css | safe }}
         </style>
     </div>
 {% endmacro %}

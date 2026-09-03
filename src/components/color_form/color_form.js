@@ -1,4 +1,4 @@
-var EightShapes = EightShapes || {};
+import { EightShapes } from "../../scripts/eightshapes.js";
 
 EightShapes.ColorForm = (function () {
   "use strict";

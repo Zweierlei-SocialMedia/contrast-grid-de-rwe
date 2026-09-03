@@ -1,4 +1,4 @@
-var EightShapes = EightShapes || {};
+import { EightShapes } from "../../scripts/eightshapes.js";
 
 EightShapes.CodeSnippet = function() {
     'use strict';
